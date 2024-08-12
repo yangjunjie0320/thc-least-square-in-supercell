@@ -53,6 +53,10 @@ for k1k2 in range(nk * nk):
     k1, k2 = divmod(k1k2, nk)
     phi2 = phi_k_2[k1, :, k2, :]
 
+    if (k1k2 + 1) % (nk * nk // 10) == 0:
+
+        print(f"Progress: {(k1k2 + 1): 5d} / {nk * nk}")
+
     if k1 != k2:
         err = abs(phi2).max()
         
