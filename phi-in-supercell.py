@@ -61,22 +61,35 @@ for k1k2 in range(nk * nk):
     if k1k2 % size != rank:
         continue
 
-    if rank == 0:
-        print(f"test for k1k2={k1k2} / {nk * nk}")
-
     k1, k2 = divmod(k1k2, nk)
     phi2 = phi_k_2[k1, :, k2, :]
 
+    if rank == 0:
+        print(f"test for k1k2 = {k1k2} / {nk * nk}, k1 = {k1}, k2 = {k2}")
+
     if k1 != k2:
         err = abs(phi2).max()
-        assert abs(phi2).max() < 1e-8, err
+        
+        if not abs(phi2).max() < 1e-8:
+            print(f"err = {err:6.2e}, k1 = {k1}, k2 = {k2}")
+            print(phi2[:10, :])
+            assert 1 == 2
 
     else:
         phi_ = cell.pbc_eval_gto('GTOval', coord0, kpt=vk[k1])
         phi_ = numpy.asarray(phi_)
 
         err = abs(phi_ - phi2).max()
-        assert err < 1e-8, err
-
+        if not err < 1e-8:
+            print(f"err = {err:6.2e}, k1 = {k1}, k2 = {k2}")
+            print(phi_[:10, :])
+            print(phi2[:10, :])
+            assert 1 == 2
+            
         err = abs(phi_k_1[k1, :] - phi2).max()
-        assert err < 1e-8, err
+        if not err < 1e-8:
+            print(f"err = {err:6.2e}, k1 = {k1}, k2 = {k2}")
+            print(phi_k_1[k1, :10, :])
+            print(phi2[:10, :])
+            assert 1 == 2
+            
