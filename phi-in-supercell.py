@@ -55,45 +55,34 @@ print(f"zeta3: {zeta3.shape}")
 theta = numpy.einsum('kx,rx->kr', vk, vr)
 phase = numpy.exp(-1j * theta)
 
-for r1r2 in range(nr * nr):
-    r1, r2 = divmod(r1r2, nr)
-    if (r1r2 + 1) % (nr * nr // 10) == 0:
-        print(f"Progress: {(r1r2 + 1): 5d} / {nr * nr}")
-
-    vdr = vr[r2] - vr[r1]
-    n = numpy.linalg.norm(vdr - vr, axis=1)
-    ind = numpy.argsort(n)[0]
-
-    if n[ind] < 1e-8:
-        err = abs(zeta1[r1, :, r2, :] - zeta1[0, :, ind, :]).max()
-        assert err < 1e-8, f"Error: {r1 = }, {r2 = }, {err = }, {ind = }"
-
 # phi_k_1 = numpy.einsum('grm,kr->kgm', phi0, phase.conj())
 # phi_k_2 = numpy.einsum("rgsm,kr,ls->kglm", phi, phase, phase.conj()) / nr
-# zeta_k = numpy.einsum("rIsJ,kr,ls->kIlJ", zeta1, phase, phase.conj()) / nr
+zeta_k = numpy.einsum("rIsJ,kr,ls->kIlJ", zeta1, phase, phase.conj()) / nr
+assert 1 == 2
 
-# for k1k2 in range(nk * nk):
-#     k1, k2 = divmod(k1k2, nk)
-#     if (k1k2 + 1) % (nk * nk // 10) == 0:
-#         print(f"Progress: {(k1k2 + 1): 5d} / {nk * nk}")
+for k1k2 in range(nk * nk):
+    k1, k2 = divmod(k1k2, nk)
+    if (k1k2 + 1) % (nk * nk // 100) == 0:
+        print(f"Progress: {(k1k2 + 1): 5d} / {nk * nk}")
+    assert 1 == 2
 
-#     if k1 != k2:
-#         err = abs(zeta_k[k1, :, k2, :]).max()
+    if k1 != k2:
+        err = abs(zeta_k[k1, :, k2, :]).max()
 
-#         if err > 1e-8:
-#             print(f"Error: {k1} {k2} {err}")
-#             assert 1 == 2
+        if err > 1e-8:
+            print(f"Error: {k1} {k2} {err}")
+            assert 1 == 2
 
-#     else:
-#         phi_k_1 = phi_k_2 = cell.pbc_eval_gto('GTOval', vk[k1], coord0)
+    else:
+        phi_k_1 = phi_k_2 = cell.pbc_eval_gto('GTOval', vk[k1], coord0)
 
-#         zeta_k_1 = zeta1[k1, :, k2, :]
-#         zeta_k_2 = numpy.einsum(
-#             "Im,Jm,In,Jn->IJ",
-#             phi_k_1.conj(), phi_k_1, 
-#             phi_k_1, phi_k_1.conj(),
-#             optimize=True
-#         )
+        zeta_k_1 = zeta1[k1, :, k2, :]
+        zeta_k_2 = numpy.einsum(
+            "Im,Jm,In,Jn->IJ",
+            phi_k_1.conj(), phi_k_1, 
+            phi_k_1, phi_k_1.conj(),
+            optimize=True
+        )
 
 print("All tests passed")
 
