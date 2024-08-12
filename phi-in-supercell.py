@@ -4,17 +4,8 @@ import scipy.linalg
 import pyscf
 from pyscf.pbc import gto
 
-from mpi4py import MPI
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-size = comm.Get_size()
-
 tmpdir = pyscf.lib.param.TMPDIR
-if rank != 0:
-    path = os.path.join(tmpdir, "rank-%d.log" % rank)
-    stdout = open(path, "w")
-else:
-    stdout = sys.stdout
+stdout = sys.stdout
 
 cell = pyscf.pbc.gto.Cell()
 cell.atom  = 'He 2.0000 2.0000 2.0000; He 2.0000 2.0000 6.0000'
@@ -58,14 +49,8 @@ phi_k_2 = numpy.einsum("rgsm,kr,ls->kglm", phi, phase, phase) / nr
 
 
 for k1k2 in range(nk * nk):
-    if k1k2 % size != rank:
-        continue
-
     k1, k2 = divmod(k1k2, nk)
     phi2 = phi_k_2[k1, :, k2, :]
-
-    if rank == 0:
-        print(f"test for k1k2 = {k1k2} / {nk * nk}, k1 = {k1}, k2 = {k2}")
 
     if k1 != k2:
         err = abs(phi2).max()
