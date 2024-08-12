@@ -41,46 +41,27 @@ phi0 = phi0.reshape(ng, nr, nao)
 phi = scell.pbc_eval_gto('GTOval', coord1)
 zeta1 = numpy.einsum("Im,Jm,In,Jn->IJ", phi, phi, phi, phi, optimize=True)
 zeta1 = zeta1.reshape(nr, ng, nr, ng)
+rho1 = numpy.einsum("gm,gn->gmn", phi, phi, optimize=True)
+rho1 = rho1.reshape(nr, ng, nr, nao, nr, nao)
 print(f"zeta1: {zeta1.shape}")
+print(f"rho1: {rho1.shape}")
 
 phi = phi.reshape(nr, ng, nr, nao)
-zeta2 = numpy.einsum("rIkm,sJkm,rIln,sJln->rIsJ", phi, phi, phi, phi, optimize=True)
-assert abs(zeta1 - zeta2).max() < 1e-8
-print(f"zeta2: {zeta2.shape}")
+rho2 = numpy.einsum("rgsm,rgtn->rgsmtn", phi, phi, optimize=True)
+assert rho2.shape == (nr, ng, nr, nao, nr, nao)
 
-zeta3 = numpy.einsum("Ikm,sJkm,Iln,sJln->IsJ", phi0, phi, phi0, phi, optimize=True)
-assert abs(zeta1[0] - zeta3).max() < 1e-8
-print(f"zeta3: {zeta3.shape}")
+rho3 = numpy.einsum("grm,gsn->grmsn", phi0, phi0, optimize=True)
+assert rho3.shape == (ng, nr, nao, nr, nao)
+rhs = numpy.einsum("grm,grm,hrm,hrm->gh", phi0, phi0, phi0, phi0, optimize=True)
 
-theta = numpy.einsum('kx,rx->kr', vk, vr)
-phase = numpy.exp(-1j * theta)
+from pyscf.lib.scipy_helper import pivoted_cholesky
+chol, perm, rank = pivoted_cholesky(rhs)
+perm = perm[:rank]
+zeta = rhs[:, perm] @ numpy.linalg.pinv(rhs[perm][:, perm])
+print(perm)
 
-# phi_k_1 = numpy.einsum('grm,kr->kgm', phi0, phase.conj())
-# phi_k_2 = numpy.einsum("rgsm,kr,ls->kglm", phi, phase, phase.conj()) / nr
-zeta_k = numpy.einsum("rIsJ,kr,ls->kIlJ", zeta1, phase, phase.conj(), optimize=True) / nr
-
-for k1k2 in range(nk * nk):
-    k1, k2 = divmod(k1k2, nk)
-    if (k1k2 + 1) % (nk * nk // 10) == 0:
-        print(f"Progress: {(k1k2 + 1): 5d} / {nk * nk}")
-
-    if k1 != k2:
-        err = abs(zeta_k[k1, :, k2, :]).max()
-
-        if err > 1e-8:
-            print(f"Error: {k1} {k2} {err}")
-            assert 1 == 2
-
-    else:
-        phi_k_1 = phi_k_2 = cell.pbc_eval_gto('GTOval', coord0, kpt=vk[k1])
-
-        zeta_k_1 = zeta1[k1, :, k2, :]
-        zeta_k_2 = numpy.einsum(
-            "Im,Jm,In,Jn->IJ",
-            phi_k_1.conj(), phi_k_1, 
-            phi_k_1, phi_k_1.conj(),
-            optimize=True
-        )
-
+rho4 = numpy.einsum("gI,Irm,Isn->grmsn", zeta, phi0[perm], phi0[perm], optimize=True)
+assert rho4.shape == (ng, nr, nao, nr, nao)
+err = abs(rho3 - rho4).max()
+assert err < 1e-10, err
 print("All tests passed")
-
