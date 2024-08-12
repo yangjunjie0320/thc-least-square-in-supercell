@@ -1,7 +1,16 @@
+import os, sys
 import numpy, scipy
 import scipy.linalg
 import pyscf
 from pyscf.pbc import gto
+
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+
+tmpdir = pyscf.lib.param.TMPDIR
+stdout = os.join(tmpdir, "rank-%d.log" % rank) if rank != 0 else sys.stdout
 
 cell = pyscf.pbc.gto.Cell()
 cell.atom  = 'He 2.0000 2.0000 2.0000; He 2.0000 2.0000 6.0000'
@@ -9,6 +18,7 @@ cell.basis = '321g'
 cell.a = numpy.diag([4.0000, 4.0000, 8.0000])
 cell.unit = 'bohr'
 cell.verbose = 5
+cell.output = stdout
 cell.build()
 
 nao = cell.nao_nr()
@@ -23,7 +33,6 @@ nr = len(vr)
 
 scell = pyscf.pbc.tools.pbc.super_cell(cell.copy(deep=True), kmesh, wrap_around=False)
 
-# ng, 3
 gmesh = numpy.asarray([10] * 3)
 ng = numpy.prod(gmesh)
 
@@ -43,14 +52,13 @@ phase = numpy.exp(-1j * theta)
 phi_k_1 = numpy.einsum('grm,kr->kgm', phi0, phase)
 phi_k_2 = numpy.einsum("rgsm,kr,ls->kglm", phi, phase, phase) / nr
 
-from mpi4py import MPI
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-size = comm.Get_size()
 
 for k1k2 in range(nk * nk):
     if k1k2 % size != rank:
         continue
+
+    if rank == 0:
+        print(f"test for k1k2={k1k2} / {nk * nk}")
 
     k1, k2 = divmod(k1k2, nk)
     phi2 = phi_k_2[k1, :, k2, :]
@@ -68,5 +76,3 @@ for k1k2 in range(nk * nk):
 
         err = abs(phi_k_1[k1, :] - phi2).max()
         assert err < 1e-8, err
-
-    print(f"test passed for k1={k1}, k2={k2}, k1k2={k1k2} / {nk * nk}, rank={rank}")
