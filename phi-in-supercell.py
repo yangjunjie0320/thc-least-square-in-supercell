@@ -28,7 +28,7 @@ nr = len(vr)
 
 scell = pyscf.pbc.tools.pbc.super_cell(cell.copy(deep=True), kmesh, wrap_around=False)
 
-gmesh = numpy.asarray([5] * 3)
+gmesh = numpy.asarray([10] * 3)
 ng = numpy.prod(gmesh)
 
 coord0 = cell.gen_uniform_grids(gmesh, wrap_around=False)
@@ -61,7 +61,7 @@ zeta_k = numpy.einsum("rIsJ,kr,ls->kIlJ", zeta1, phase, phase.conj(), optimize=T
 
 for k1k2 in range(nk * nk):
     k1, k2 = divmod(k1k2, nk)
-    if (k1k2 + 1) % (nk * nk // 100) == 0:
+    if (k1k2 + 1) % (nk * nk // 10) == 0:
         print(f"Progress: {(k1k2 + 1): 5d} / {nk * nk}")
 
     if k1 != k2:
