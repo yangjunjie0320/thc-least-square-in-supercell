@@ -1,16 +1,17 @@
 #!/bin/bash
 #SBATCH --partition=debug
 #SBATCH --time=01:00:00
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=4
-#SBATCH --cpus-per-task=7
-#SBATCH --job-name=fd-eph
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=2
+#SBATCH --cpus-per-task=14
+#SBATCH --job-name=phi
 #SBATCH --mem=500000
 
 source /home/yangjunjie/.bashrc
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK;
 export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK;
 export PYSCF_MAX_MEMORY=$SLURM_MEM_PER_NODE;
+export PYTHONUNBUFFERED=TRUE;
 echo $PYSCF_MAX_MEMORY
 
 conda activate py310-pyscf
@@ -22,3 +23,4 @@ echo PYSCF_TMPDIR = $PYSCF_TMPDIR
 mkdir -p $TMPDIR
 
 mpiexec -n 4 python phi-in-supercell.py
+

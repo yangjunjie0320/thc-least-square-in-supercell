@@ -1,0 +1,223 @@
+500000
+TMPDIR = /scratch/global/yangjunjie/phi/546302/
+PYSCF_TMPDIR = /scratch/global/yangjunjie/phi/546302/
+#INFO: **** input file is /home/yangjunjie/work/thc-least-square-in-supercell/phi-in-supercell.py ****
+import os, sys
+import numpy, scipy
+import scipy.linalg
+import pyscf
+from pyscf.pbc import gto
+
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+
+tmpdir = pyscf.lib.param.TMPDIR
+if rank != 0:
+    path = os.path.join(tmpdir, "rank-%d.log" % rank)
+    stdout = open(path, "w")
+else:
+    stdout = sys.stdout
+
+cell = pyscf.pbc.gto.Cell()
+cell.atom  = 'He 2.0000 2.0000 2.0000; He 2.0000 2.0000 6.0000'
+cell.basis = '321g'
+cell.a = numpy.diag([4.0000, 4.0000, 8.0000])
+cell.unit = 'bohr'
+cell.verbose = 5
+cell.stdout = stdout
+cell.build()
+
+nao = cell.nao_nr()
+
+kmesh = numpy.asarray([4] * 3)
+vk = kpts = cell.make_kpts(kmesh)
+nk = len(vk)
+
+from pyscf.pbc.tools.k2gamma import translation_vectors_for_kmesh
+vr = rpts = translation_vectors_for_kmesh(cell, kmesh=kmesh, wrap_around=False)
+nr = len(vr)
+
+scell = pyscf.pbc.tools.pbc.super_cell(cell.copy(deep=True), kmesh, wrap_around=False)
+
+gmesh = numpy.asarray([5] * 3)
+ng = numpy.prod(gmesh)
+
+coord0 = cell.gen_uniform_grids(gmesh, wrap_around=False)
+coord1 = coord0[None, :] + vr[:, None]
+coord1 = coord1.reshape(nr * ng, 3)
+
+phi0 = scell.pbc_eval_gto('GTOval', coord0)
+phi0 = phi0.reshape(ng, nr, nao)
+
+phi = scell.pbc_eval_gto('GTOval', coord1)
+phi = phi.reshape(nr, ng, nr, nao) # , nr)
+
+theta = numpy.einsum('kx,rx->kr', vk, vr)
+phase = numpy.exp(-1j * theta)
+
+phi_k_1 = numpy.einsum('grm,kr->kgm', phi0, phase)
+phi_k_2 = numpy.einsum("rgsm,kr,ls->kglm", phi, phase, phase) / nr
+
+
+for k1k2 in range(nk * nk):
+    if k1k2 % size != rank:
+        continue
+
+    if rank == 0:
+        print(f"test for k1k2={k1k2} / {nk * nk}")
+
+    k1, k2 = divmod(k1k2, nk)
+    phi2 = phi_k_2[k1, :, k2, :]
+
+    if k1 != k2:
+        err = abs(phi2).max()
+        assert abs(phi2).max() < 1e-8, err
+
+    else:
+        phi_ = cell.pbc_eval_gto('GTOval', coord0, kpt=vk[k1])
+        phi_ = numpy.asarray(phi_)
+
+        err = abs(phi_ - phi2).max()
+        assert err < 1e-8, err
+
+        err = abs(phi_k_1[k1, :] - phi2).max()
+        assert err < 1e-8, err
+#INFO: ******************** input file end ********************
+
+
+System: uname_result(system='Linux', node='pauling029', release='3.10.0-327.36.3.el7.x86_64', version='#1 SMP Thu Oct 20 04:56:07 EDT 2016', machine='x86_64')  Threads 14
+Python 3.10.14 | packaged by conda-forge | (main, Mar 20 2024, 12:45:18) [GCC 12.3.0]
+numpy 1.26.4  scipy 1.14.0  h5py 3.11.0
+Date: Sun Aug 11 22:03:40 2024
+PySCF version 2.6.2
+PySCF path  /home/yangjunjie/packages/pyscf/py310-pyscf
+GIT HEAD (branch master) ca8c7c1680defdfee2380eda3af3a28d9fb375cb
+
+[ENV] PYSCF_MAX_MEMORY 500000
+[ENV] PYSCF_TMPDIR /scratch/global/yangjunjie/phi/546302/
+[CONFIG] conf_file /home/yangjunjie/.pyscf_conf.py
+[INPUT] verbose = 5
+[INPUT] max_memory = 500000 
+[INPUT] num. atoms = 2
+[INPUT] num. electrons = 4
+[INPUT] charge = 0
+[INPUT] spin (= nelec alpha-beta = 2S) = 0
+[INPUT] symmetry False subgroup None
+[INPUT] Mole.unit = bohr
+[INPUT] Symbol           X                Y                Z      unit          X                Y                Z       unit  Magmom
+[INPUT]  1 He     1.058354421840   1.058354421840   1.058354421840 AA    2.000000000000   2.000000000000   2.000000000000 Bohr   0.0
+[INPUT]  2 He     1.058354421840   1.058354421840   3.175063265520 AA    2.000000000000   2.000000000000   6.000000000000 Bohr   0.0
+[INPUT] ---------------- BASIS SET ---------------- 
+[INPUT] l, kappa, [nprim/nctr], expnt,             c_1 c_2 ...
+[INPUT] He
+[INPUT] 0    0    [2    /1   ]  13.6267           0.17523
+                                1.99935           0.893483
+[INPUT] 0    0    [1    /1   ]  0.382993             1
+
+Ewald components = 0.0736089428601405, -3.00008278569653, 0.08917636335577
+nuclear repulsion = -2.83729747948062
+number of shells = 4
+number of NR pGTOs = 6
+number of NR cGTOs = 4
+basis = 321g
+ecp = {}
+CPU time:         1.93
+lattice vectors  a1 [4.000000000, 0.000000000, 0.000000000]
+                 a2 [0.000000000, 4.000000000, 0.000000000]
+                 a3 [0.000000000, 0.000000000, 8.000000000]
+dimension = 3
+low_dim_ft_type = None
+Cell volume = 128
+rcut = 11.574358756914298 (nimgs = [3 3 2])
+lattice sum = 173 cells
+precision = 1e-08
+pseudo = None
+ke_cutoff = 1151.1727246754501
+    = [ 63  63 125] mesh (496125 PWs)
+test for k1k2=0 / 4096
+test for k1k2=4 / 4096
+test for k1k2=8 / 4096
+test for k1k2=12 / 4096
+test for k1k2=16 / 4096
+test for k1k2=20 / 4096
+test for k1k2=24 / 4096
+test for k1k2=28 / 4096
+test for k1k2=32 / 4096
+test for k1k2=36 / 4096
+test for k1k2=40 / 4096
+test for k1k2=44 / 4096
+test for k1k2=48 / 4096
+test for k1k2=52 / 4096
+test for k1k2=56 / 4096
+test for k1k2=60 / 4096
+test for k1k2=64 / 4096
+test for k1k2=68 / 4096
+test for k1k2=72 / 4096
+test for k1k2=76 / 4096
+test for k1k2=80 / 4096
+test for k1k2=84 / 4096
+test for k1k2=88 / 4096
+test for k1k2=92 / 4096
+test for k1k2=96 / 4096
+test for k1k2=100 / 4096
+test for k1k2=104 / 4096
+test for k1k2=108 / 4096
+test for k1k2=112 / 4096
+test for k1k2=116 / 4096
+test for k1k2=120 / 4096
+test for k1k2=124 / 4096
+test for k1k2=128 / 4096
+test for k1k2=132 / 4096
+test for k1k2=136 / 4096
+test for k1k2=140 / 4096
+test for k1k2=144 / 4096
+test for k1k2=148 / 4096
+test for k1k2=152 / 4096
+test for k1k2=156 / 4096
+test for k1k2=160 / 4096
+test for k1k2=164 / 4096
+test for k1k2=168 / 4096
+test for k1k2=172 / 4096
+test for k1k2=176 / 4096
+test for k1k2=180 / 4096
+test for k1k2=184 / 4096
+test for k1k2=188 / 4096
+test for k1k2=192 / 4096
+test for k1k2=196 / 4096
+test for k1k2=200 / 4096
+test for k1k2=204 / 4096
+test for k1k2=208 / 4096
+test for k1k2=212 / 4096
+test for k1k2=216 / 4096
+test for k1k2=220 / 4096
+test for k1k2=224 / 4096
+test for k1k2=228 / 4096
+test for k1k2=232 / 4096
+test for k1k2=236 / 4096
+test for k1k2=240 / 4096
+test for k1k2=244 / 4096
+test for k1k2=248 / 4096
+test for k1k2=252 / 4096
+test for k1k2=256 / 4096
+test for k1k2=260 / 4096
+Traceback (most recent call last):
+  File "/home/yangjunjie/work/thc-least-square-in-supercell/phi-in-supercell.py", line 79, in <module>
+    assert err < 1e-8, err
+AssertionError: 0.4113649248733113
+Traceback (most recent call last):
+  File "/home/yangjunjie/work/thc-least-square-in-supercell/phi-in-supercell.py", line 79, in <module>
+    assert err < 1e-8, err
+AssertionError: 0.41136492487646303
+Traceback (most recent call last):
+  File "/home/yangjunjie/work/thc-least-square-in-supercell/phi-in-supercell.py", line 72, in <module>
+    assert abs(phi2).max() < 1e-8, err
+AssertionError: 0.411364924875675
+Traceback (most recent call last):
+  File "/home/yangjunjie/work/thc-least-square-in-supercell/phi-in-supercell.py", line 79, in <module>
+    assert err < 1e-8, err
+AssertionError: 0.4113649248733113
+srun: error: pauling029: tasks 0-1: Exited with exit code 1
+srun: launch/slurm: _step_signal: Terminating StepId=546302.0
+srun: error: pauling030: tasks 2-3: Exited with exit code 1

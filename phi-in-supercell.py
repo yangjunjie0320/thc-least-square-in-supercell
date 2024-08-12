@@ -10,7 +10,11 @@ rank = comm.Get_rank()
 size = comm.Get_size()
 
 tmpdir = pyscf.lib.param.TMPDIR
-stdout = os.join(tmpdir, "rank-%d.log" % rank) if rank != 0 else sys.stdout
+if rank != 0:
+    path = os.path.join(tmpdir, "rank-%d.log" % rank)
+    stdout = open(path, "w")
+else:
+    stdout = sys.stdout
 
 cell = pyscf.pbc.gto.Cell()
 cell.atom  = 'He 2.0000 2.0000 2.0000; He 2.0000 2.0000 6.0000'
@@ -18,7 +22,7 @@ cell.basis = '321g'
 cell.a = numpy.diag([4.0000, 4.0000, 8.0000])
 cell.unit = 'bohr'
 cell.verbose = 5
-cell.output = stdout
+cell.stdout = stdout
 cell.build()
 
 nao = cell.nao_nr()
@@ -33,7 +37,7 @@ nr = len(vr)
 
 scell = pyscf.pbc.tools.pbc.super_cell(cell.copy(deep=True), kmesh, wrap_around=False)
 
-gmesh = numpy.asarray([10] * 3)
+gmesh = numpy.asarray([5] * 3)
 ng = numpy.prod(gmesh)
 
 coord0 = cell.gen_uniform_grids(gmesh, wrap_around=False)
