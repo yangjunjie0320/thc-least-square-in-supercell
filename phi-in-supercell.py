@@ -44,8 +44,8 @@ phi = phi.reshape(nr, ng, nr, nao)
 theta = numpy.einsum('kx,rx->kr', vk, vr)
 phase = numpy.exp(-1j * theta)
 
-phi_k_1 = numpy.einsum('grm,kr->kgm', phi0, phase)
-phi_k_2 = numpy.einsum("rgsm,kr,ls->kglm", phi, phase.conj(), phase) / nr
+phi_k_1 = numpy.einsum('grm,kr->kgm', phi0, phase.conj())
+phi_k_2 = numpy.einsum("rgsm,kr,ls->kglm", phi, phase, phase.conj()) / nr
 
 err_info = []
 
