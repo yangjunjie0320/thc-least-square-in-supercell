@@ -1,6 +1,6 @@
 500000
-TMPDIR = /scratch/global/yangjunjie/phi/546334/
-PYSCF_TMPDIR = /scratch/global/yangjunjie/phi/546334/
+TMPDIR = /scratch/global/yangjunjie/phi/546344/
+PYSCF_TMPDIR = /scratch/global/yangjunjie/phi/546344/
 #INFO: **** input file is /home/yangjunjie/work/thc-least-square-in-supercell/phi-in-supercell.py ****
 import os, sys
 import numpy, scipy
@@ -45,24 +45,27 @@ phi0 = phi0.reshape(ng, nr, nao)
 phi = scell.pbc_eval_gto('GTOval', coord1)
 zeta1 = numpy.einsum("Im,Jm,In,Jn->IJ", phi, phi, phi, phi, optimize=True)
 zeta1 = zeta1.reshape(nr, ng, nr, ng)
+print(f"zeta1: {zeta1.shape}")
 
 phi = phi.reshape(nr, ng, nr, nao)
 zeta2 = numpy.einsum("rIkm,sJkm,rIln,sJln->rIsJ", phi, phi, phi, phi, optimize=True)
 assert abs(zeta1 - zeta2).max() < 1e-8
+print(f"zeta2: {zeta2.shape}")
 
 zeta3 = numpy.einsum("Ikm,sJkm,Iln,sJln->IsJ", phi0, phi, phi0, phi, optimize=True)
 assert abs(zeta1[0] - zeta3).max() < 1e-8
+print(f"zeta3: {zeta3.shape}")
 
 theta = numpy.einsum('kx,rx->kr', vk, vr)
 phase = numpy.exp(-1j * theta)
 
 # phi_k_1 = numpy.einsum('grm,kr->kgm', phi0, phase.conj())
 # phi_k_2 = numpy.einsum("rgsm,kr,ls->kglm", phi, phase, phase.conj()) / nr
-zeta_k = numpy.einsum("rIsJ,kr,ls->kIlJ", zeta1, phase, phase.conj()) / nr
+zeta_k = numpy.einsum("rIsJ,kr,ls->kIlJ", zeta1, phase, phase.conj(), optimize=True) / nr
 
 for k1k2 in range(nk * nk):
     k1, k2 = divmod(k1k2, nk)
-    if (k1k2 + 1) % (nk * nk // 10) == 0:
+    if (k1k2 + 1) % (nk * nk // 100) == 0:
         print(f"Progress: {(k1k2 + 1): 5d} / {nk * nk}")
 
     if k1 != k2:
@@ -91,13 +94,13 @@ print("All tests passed")
 System: uname_result(system='Linux', node='pauling034', release='3.10.0-327.36.3.el7.x86_64', version='#1 SMP Thu Oct 20 04:56:07 EDT 2016', machine='x86_64')  Threads 28
 Python 3.10.14 | packaged by conda-forge | (main, Mar 20 2024, 12:45:18) [GCC 12.3.0]
 numpy 1.26.4  scipy 1.14.0  h5py 3.11.0
-Date: Mon Aug 12 10:27:50 2024
+Date: Mon Aug 12 11:28:52 2024
 PySCF version 2.6.2
 PySCF path  /home/yangjunjie/packages/pyscf/py310-pyscf
 GIT HEAD (branch master) ca8c7c1680defdfee2380eda3af3a28d9fb375cb
 
 [ENV] PYSCF_MAX_MEMORY 500000
-[ENV] PYSCF_TMPDIR /scratch/global/yangjunjie/phi/546334/
+[ENV] PYSCF_TMPDIR /scratch/global/yangjunjie/phi/546344/
 [CONFIG] conf_file /home/yangjunjie/.pyscf_conf.py
 [INPUT] verbose = 5
 [INPUT] max_memory = 500000 
@@ -124,7 +127,7 @@ number of NR pGTOs = 6
 number of NR cGTOs = 4
 basis = 321g
 ecp = {}
-CPU time:         3.42
+CPU time:         3.39
 lattice vectors  a1 [4.000000000, 0.000000000, 0.000000000]
                  a2 [0.000000000, 4.000000000, 0.000000000]
                  a3 [0.000000000, 0.000000000, 8.000000000]
@@ -137,4 +140,12 @@ precision = 1e-08
 pseudo = None
 ke_cutoff = 1151.1727246754501
     = [ 63  63 125] mesh (496125 PWs)
-slurmstepd: error: *** JOB 546334 ON pauling034 CANCELLED AT 2024-08-12T10:33:05 ***
+zeta1: (64, 125, 64, 125)
+zeta2: (64, 125, 64, 125)
+zeta3: (125, 64, 125)
+Traceback (most recent call last):
+  File "/home/yangjunjie/work/thc-least-square-in-supercell/phi-in-supercell.py", line 75, in <module>
+    phi_k_1 = phi_k_2 = cell.pbc_eval_gto('GTOval', vk[k1], coord0)
+  File "/home/yangjunjie/packages/pyscf/py310-pyscf/pyscf/pbc/gto/eval_gto.py", line 129, in eval_gto
+    out = np.empty((nkpts,comp,nao,ngrids), dtype=np.complex128)
+TypeError: only integer scalar arrays can be converted to a scalar index

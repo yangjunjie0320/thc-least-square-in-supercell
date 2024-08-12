@@ -57,14 +57,12 @@ phase = numpy.exp(-1j * theta)
 
 # phi_k_1 = numpy.einsum('grm,kr->kgm', phi0, phase.conj())
 # phi_k_2 = numpy.einsum("rgsm,kr,ls->kglm", phi, phase, phase.conj()) / nr
-zeta_k = numpy.einsum("rIsJ,kr,ls->kIlJ", zeta1, phase, phase.conj()) / nr
-assert 1 == 2
+zeta_k = numpy.einsum("rIsJ,kr,ls->kIlJ", zeta1, phase, phase.conj(), optimize=True) / nr
 
 for k1k2 in range(nk * nk):
     k1, k2 = divmod(k1k2, nk)
     if (k1k2 + 1) % (nk * nk // 100) == 0:
         print(f"Progress: {(k1k2 + 1): 5d} / {nk * nk}")
-    assert 1 == 2
 
     if k1 != k2:
         err = abs(zeta_k[k1, :, k2, :]).max()
