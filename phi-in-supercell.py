@@ -30,15 +30,12 @@ ng = numpy.prod(gmesh)
 coord0 = cell.gen_uniform_grids(gmesh, wrap_around=False)
 coord1 = coord0[None, :] + vr[:, None]
 coord1 = coord1.reshape(nr * ng, 3)
-print(f"{ng = }, {nr = }, {nao = }")
 
 phi0 = scell.pbc_eval_gto('GTOval', coord0)
 phi0 = phi0.reshape(ng, nr, nao)
-print(phi0.shape)
 
 phi = scell.pbc_eval_gto('GTOval', coord1)
 phi = phi.reshape(nr, ng, nr, nao) # , nr)
-print(phi.shape)
 
 theta = numpy.einsum('kx,rx->kr', vk, vr)
 phase = numpy.exp(-1j * theta)
@@ -46,20 +43,30 @@ phase = numpy.exp(-1j * theta)
 phi_k_1 = numpy.einsum('grm,kr->kgm', phi0, phase)
 phi_k_2 = numpy.einsum("rgsm,kr,ls->kglm", phi, phase, phase) / nr
 
-for k1 in range(nk):
-    for k2 in range(nk):
-        phi2 = phi_k_2[k1, :, k2, :]
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
 
-        if k1 != k2:
-            err = abs(phi2).max()
-            assert abs(phi2).max() < 1e-8, err
+for k1k2 in range(nk * nk):
+    if k1k2 % size != rank:
+        continue
 
-        else:
-            phi_ = cell.pbc_eval_gto('GTOval', coord0, kpt=vk[k1])
-            phi_ = numpy.asarray(phi_)
+    k1, k2 = divmod(k1k2, nk)
+    phi2 = phi_k_2[k1, :, k2, :]
 
-            err = abs(phi_ - phi2).max()
-            assert err < 1e-8, err
+    if k1 != k2:
+        err = abs(phi2).max()
+        assert abs(phi2).max() < 1e-8, err
 
-            err = abs(phi_k_1[k1, :] - phi2).max()
-            assert err < 1e-8, err
+    else:
+        phi_ = cell.pbc_eval_gto('GTOval', coord0, kpt=vk[k1])
+        phi_ = numpy.asarray(phi_)
+
+        err = abs(phi_ - phi2).max()
+        assert err < 1e-8, err
+
+        err = abs(phi_k_1[k1, :] - phi2).max()
+        assert err < 1e-8, err
+
+    print(f"test passed for k1={k1}, k2={k2}, k1k2={k1k2} / {nk * nk}, rank={rank}")

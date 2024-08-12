@@ -2,7 +2,7 @@
 #SBATCH --partition=debug
 #SBATCH --time=01:00:00
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
+#SBATCH --ntasks-per-node=4
 #SBATCH --cpus-per-task=28
 #SBATCH --job-name=fd-eph
 #SBATCH --mem=500000
@@ -21,4 +21,4 @@ echo TMPDIR       = $TMPDIR
 echo PYSCF_TMPDIR = $PYSCF_TMPDIR
 mkdir -p $TMPDIR
 
-python -u phi-in-supercell.py
+mpiexec -n 4 python3 run.py
