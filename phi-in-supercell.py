@@ -8,6 +8,7 @@ cell.atom  = 'He 2.0000 2.0000 2.0000; He 2.0000 2.0000 6.0000'
 cell.basis = '321g'
 cell.a = numpy.diag([4.0000, 4.0000, 8.0000])
 cell.unit = 'bohr'
+cell.verbose = 5
 cell.build()
 
 nao = cell.nao_nr()
@@ -29,12 +30,15 @@ ng = numpy.prod(gmesh)
 coord0 = cell.gen_uniform_grids(gmesh, wrap_around=False)
 coord1 = coord0[None, :] + vr[:, None]
 coord1 = coord1.reshape(nr * ng, 3)
+print(f"{ng = }, {nr = }, {nao = }")
 
 phi0 = scell.pbc_eval_gto('GTOval', coord0)
 phi0 = phi0.reshape(ng, nr, nao)
+print(phi0.shape)
 
 phi = scell.pbc_eval_gto('GTOval', coord1)
 phi = phi.reshape(nr, ng, nr, nao) # , nr)
+print(phi.shape)
 
 theta = numpy.einsum('kx,rx->kr', vk, vr)
 phase = numpy.exp(-1j * theta)
@@ -52,7 +56,7 @@ for k1 in range(nk):
 
         else:
             phi_ = cell.pbc_eval_gto('GTOval', coord0, kpt=vk[k1])
-            phi_ = numpy.asarray(phi_).real
+            phi_ = numpy.asarray(phi_)
 
             err = abs(phi_ - phi2).max()
             assert err < 1e-8, err
