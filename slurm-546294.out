@@ -1,0 +1,9 @@
+500000
+TMPDIR = /scratch/global/yangjunjie/fd-eph/546294/
+PYSCF_TMPDIR = /scratch/global/yangjunjie/fd-eph/546294/
+/home/yangjunjie/anaconda3/envs/py310-pyscf/bin/python3: can't open file '/home/yangjunjie/work/thc-least-square-in-supercell/run.py': [Errno 2] No such file or directory
+/home/yangjunjie/anaconda3/envs/py310-pyscf/bin/python3: can't open file '/home/yangjunjie/work/thc-least-square-in-supercell/run.py': [Errno 2] No such file or directory
+/home/yangjunjie/anaconda3/envs/py310-pyscf/bin/python3: can't open file '/home/yangjunjie/work/thc-least-square-in-supercell/run.py': [Errno 2] No such file or directory
+/home/yangjunjie/anaconda3/envs/py310-pyscf/bin/python3: can't open file '/home/yangjunjie/work/thc-least-square-in-supercell/run.py': [Errno 2] No such file or directory
+srun: error: pauling029: tasks 0-3: Exited with exit code 2
+srun: launch/slurm: _step_signal: Terminating StepId=546294.0
