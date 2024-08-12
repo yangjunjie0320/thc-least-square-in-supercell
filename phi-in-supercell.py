@@ -28,7 +28,7 @@ nr = len(vr)
 
 scell = pyscf.pbc.tools.pbc.super_cell(cell.copy(deep=True), kmesh, wrap_around=False)
 
-gmesh = numpy.asarray([10] * 3)
+gmesh = numpy.asarray([11] * 3)
 ng = numpy.prod(gmesh)
 
 coord0 = cell.gen_uniform_grids(gmesh, wrap_around=False)
