@@ -18,7 +18,7 @@ cell.build()
 
 nao = cell.nao_nr()
 
-kmesh = numpy.asarray([4] * 3)
+kmesh = numpy.asarray([2] * 3)
 vk = kpts = cell.make_kpts(kmesh)
 nk = len(vk)
 
@@ -36,7 +36,7 @@ coord1 = coord0[None, :] + vr[:, None]
 coord1 = coord1.reshape(nr * ng, 3)
 
 phi0 = scell.pbc_eval_gto('GTOval', coord0)
-phi0 = phi0.reshape(ng, nr, nao)
+phi0 = phi0.reshape(nr, ng, nao)
 
 phi = scell.pbc_eval_gto('GTOval', coord1)
 phi = phi.reshape(nr, ng, nr, nao) # , nr)
@@ -44,9 +44,10 @@ phi = phi.reshape(nr, ng, nr, nao) # , nr)
 theta = numpy.einsum('kx,rx->kr', vk, vr)
 phase = numpy.exp(-1j * theta)
 
-phi_k_1 = numpy.einsum('grm,kr->kgm', phi0, phase)
+phi_k_1 = numpy.einsum('rgm,kr->kgm', phi0, phase)
 phi_k_2 = numpy.einsum("rgsm,kr,ls->kglm", phi, phase, phase) / nr
 
+err_info = []
 
 for k1k2 in range(nk * nk):
     k1, k2 = divmod(k1k2, nk)
@@ -56,8 +57,8 @@ for k1k2 in range(nk * nk):
         err = abs(phi2).max()
         
         if not abs(phi2).max() < 1e-8:
-            print(f"err = {err:6.2e}, k1 = {k1}, k2 = {k2}")
-            print(phi2[:10, :])
+            err_info.append(f"err = {err:6.2e}, k1 = {k1}, k2 = {k2}")
+            err_info.append(phi2[:10, :])
             assert 1 == 2
 
     else:
@@ -77,4 +78,4 @@ for k1k2 in range(nk * nk):
             print(phi_k_1[k1, :10, :])
             print(phi2[:10, :])
             assert 1 == 2
-            
+
