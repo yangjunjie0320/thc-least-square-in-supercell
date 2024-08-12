@@ -72,7 +72,7 @@ for k1k2 in range(nk * nk):
             assert 1 == 2
 
     else:
-        phi_k_1 = phi_k_2 = cell.pbc_eval_gto('GTOval', vk[k1], coord0)
+        phi_k_1 = phi_k_2 = cell.pbc_eval_gto('GTOval', coord0, kpt=vk[k1])
 
         zeta_k_1 = zeta1[k1, :, k2, :]
         zeta_k_2 = numpy.einsum(
