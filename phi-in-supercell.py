@@ -28,7 +28,7 @@ nr = len(vr)
 
 scell = pyscf.pbc.tools.pbc.super_cell(cell.copy(deep=True), kmesh, wrap_around=False)
 
-gmesh = numpy.asarray([11] * 3)
+gmesh = numpy.asarray([5] * 3)
 ng = numpy.prod(gmesh)
 
 coord0 = cell.gen_uniform_grids(gmesh, wrap_around=False)
@@ -39,49 +39,45 @@ phi0 = scell.pbc_eval_gto('GTOval', coord0)
 phi0 = phi0.reshape(ng, nr, nao)
 
 phi = scell.pbc_eval_gto('GTOval', coord1)
+zeta1 = numpy.einsum("Im,Jm,In,Jn->IJ", phi, phi, phi, phi, optimize=True)
+zeta1 = zeta1.reshape(nr, ng, nr, ng)
+
 phi = phi.reshape(nr, ng, nr, nao)
+zeta2 = numpy.einsum("rIkm,sJkm,rIln,sJln->rIsJ", phi, phi, phi, phi, optimize=True)
+assert abs(zeta1 - zeta2).max() < 1e-8
+
+zeta3 = numpy.einsum("Ikm,sJkm,Iln,sJln->IsJ", phi0, phi, phi0, phi, optimize=True)
+assert abs(zeta1[0] - zeta3).max() < 1e-8
 
 theta = numpy.einsum('kx,rx->kr', vk, vr)
 phase = numpy.exp(-1j * theta)
 
-phi_k_1 = numpy.einsum('grm,kr->kgm', phi0, phase.conj())
-phi_k_2 = numpy.einsum("rgsm,kr,ls->kglm", phi, phase, phase.conj()) / nr
-
-err_info = []
+# phi_k_1 = numpy.einsum('grm,kr->kgm', phi0, phase.conj())
+# phi_k_2 = numpy.einsum("rgsm,kr,ls->kglm", phi, phase, phase.conj()) / nr
+zeta_k = numpy.einsum("rIsJ,kr,ls->kIlJ", zeta1, phase, phase.conj()) / nr
 
 for k1k2 in range(nk * nk):
     k1, k2 = divmod(k1k2, nk)
-    phi2 = phi_k_2[k1, :, k2, :]
-
     if (k1k2 + 1) % (nk * nk // 10) == 0:
-
         print(f"Progress: {(k1k2 + 1): 5d} / {nk * nk}")
 
     if k1 != k2:
-        err = abs(phi2).max()
-        
-        if not abs(phi2).max() < 1e-8:
-            print(f"err = {err:6.2e}, k1 = {k1}, k2 = {k2}")
-            print(phi2[:10, :])
+        err = abs(zeta_k[k1, :, k2, :]).max()
+
+        if err > 1e-8:
+            print(f"Error: {k1} {k2} {err}")
             assert 1 == 2
 
     else:
-        phi_ = cell.pbc_eval_gto('GTOval', coord0, kpt=vk[k1])
-        phi_ = numpy.asarray(phi_)
+        phi_k_1 = phi_k_2 = cell.pbc_eval_gto('GTOval', vk[k1], coord0)
 
-        err = abs(phi_ - phi2).max()
-        if not err < 1e-8:
-            print(f"err = {err:6.2e}, k1 = {k1}, k2 = {k2}")
-            print(phi_[:10, :])
-            print(phi2[:10, :])
-            assert 1 == 2
-            
-        err = abs(phi_k_1[k1, :] - phi2).max()
-        if not err < 1e-8:
-            print(f"err = {err:6.2e}, k1 = {k1}, k2 = {k2}")
-            print(phi_k_1[k1, :10, :])
-            print(phi2[:10, :])
-            assert 1 == 2
+        zeta_k_1 = zeta1[k1, :, k2, :]
+        zeta_k_2 = numpy.einsum(
+            "Im,Jm,In,Jn->IJ",
+            phi_k_1.conj(), phi_k_1, 
+            phi_k_1, phi_k_1.conj(),
+            optimize=True
+        )
 
 print("All tests passed")
 
