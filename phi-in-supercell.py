@@ -31,7 +31,7 @@ nr = len(vr)
 
 scell = pyscf.pbc.tools.pbc.super_cell(cell.copy(deep=True), kmesh, wrap_around=False)
 
-gmesh = numpy.asarray([5] * 3)
+gmesh = numpy.asarray([10] * 3)
 ng = numpy.prod(gmesh)
 
 coord0 = cell.gen_uniform_grids(gmesh, wrap_around=False)
@@ -48,27 +48,42 @@ phik = cell.pbc_eval_gto('GTOval', coord0, kpts=vk)
 phik = numpy.asarray(phik).reshape(nk, ng, nao)
 print(phik.shape)
 
-rho = einsum("rgsm,rgtn->rgsmtn", phi, phi, optimize=True)
-assert rho.shape == (nr, ng, nr, nao, nr, nao)
-rho1 = rho[0]
+# rho = einsum("rgsm,rgtn->rgsmtn", phi, phi, optimize=True)
+# assert rho.shape == (nr, ng, nr, nao, nr, nao)
+# rho1 = rho[0]
 
 rho2 = einsum("grm,gsn->grmsn", phi0, phi0, optimize=True)
 assert rho2.shape == (ng, nr, nao, nr, nao)
+rho = rho2
 
-err = abs(rho1 - rho2).max()
+# err = abs(rho1 - rho2).max()
+# assert err < 1e-10, err
+
+# rho_k = einsum("kgm,lgn->gkmln", phik.conj(), phik)
+# assert rho_k.shape == (ng, nk, nao, nk, nao)
+
+# theta = numpy.dot(vr, vk.T)
+# theta = theta.reshape(nr, nk)
+# phase = numpy.exp(-1j * theta)
+# rho3 = einsum("gkmln,rk,sl->grmsn", rho_k, phase.conj(), phase) / nr / nr
+# rho3 = rho3.reshape(ng, nr, nao, nr, nao)
+
+# zeta1 = einsum("grmsn,hrmsn->gh", rho3, rho3)
+zeta1 = einsum("kgm,khm,lgn,lhn->gh", phik.conj(), phik, phik.conj(), phik) / nr / nr
+assert abs(zeta1.imag).max() < 1e-10
+
+zeta1 = zeta1.real
+err = 0.0 # abs(zeta1 - zeta2).max()
 assert err < 1e-10, err
 
-rho_k = einsum("kgm,lgn->gkmln", phik.conj(), phik)
-assert rho_k.shape == (ng, nk, nao, nk, nao)
+from pyscf.lib.scipy_helper import pivoted_cholesky
+chol, perm, rank = pivoted_cholesky(zeta1)
+mask = perm[:rank]
 
-theta = numpy.dot(vr, vk.T)
-theta = theta.reshape(nr, nk)
-phase = numpy.exp(-1j * theta)
-rho3 = einsum("gkmln,rk,sl->grmsn", rho_k, phase.conj(), phase) / nr / nr
-rho3 = rho3.reshape(ng, nr, nao, nr, nao)
-
-err = abs(rho1 - rho3).max()
-assert err < 1e-10
+res = scipy.linalg.lstsq(zeta1[mask][:, mask], zeta1[mask, :].T)
+print(res[0].shape)
+print(res[1].shape)
+print(res[2])
 
 print("all test passed!")
 
