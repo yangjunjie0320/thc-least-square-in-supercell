@@ -74,7 +74,9 @@ def get_eri_1(k1, k2, k3, k4):
     x1, x2, x3, x4 = pbcdft.numint.eval_ao_kpts(c, coord[mask], kpts=[vk1, vk2, vk3, vk4])
 
     eri = einsum("IJ,Im,In,Jk,Jl->mnkl", coul_q, x1.conj(), x2, x3, x4.conj())
-    return eri.reshape(nao * nao, nao * nao)
+    ao_pair_12 = einsum("Ig,Im,In->mng", z12_g, x1.conj(), x2)
+    ao_pair_34 = einsum("Ig,Jk,Jl->klg", z34_g, x3, x4.conj())
+    return eri.reshape(nao * nao, nao * nao), ao_pair_12, ao_pair_34
 
 def get_eri_2(k1, k2, k3, k4):
     vk1, vk2, vk3, vk4 = vk[k1], vk[k2], vk[k3], vk[k4]
@@ -96,13 +98,10 @@ def get_eri_2(k1, k2, k3, k4):
     eri = einsum(
         "gx,gy->xy", v12_g, z34_g
     )
-    return eri
+    return eri, z12_g, z34_g
 
 for (k1, k2, k3) in itertools.product(range(nk), repeat=3):
     vk1, vk2, vk3 = vk[k1], vk[k2], vk[k3]
-
-    q = kconserv2[k1, k2]
-    vq = vk[q]
     k4 = kconserv3[k1, k2, k3]
     vk4 = vk[k4]
 
@@ -111,13 +110,28 @@ for (k1, k2, k3) in itertools.product(range(nk), repeat=3):
     vk1234 = numpy.asarray([vk1, vk2, vk3, vk4])
     assert _iskconserv(c, vk1234)
 
-    eri_sol = get_eri_1(k1, k2, k3, k4)
-    eri_ref = get_eri_2(k1, k2, k3, k4)
+    if not (k1, k2, k3, k4) == (0, 1, 0, 3):
+        continue
+
+    eri_sol, rho_12_sol, rho_34_sol = get_eri_1(k1, k2, k3, k4)
+    eri_ref, rho_12_ref, rho_34_ref = get_eri_2(k1, k2, k3, k4)
+
+    print(f"k1 = {k1:4d}, k2 = {k2:4d}, k3 = {k3:4d}, k4 = {k4:4d}, err = {err1 + err2:6.2e}")
+
+    err1 = abs(rho_12_sol - rho_12_ref).max()
+    err2 = abs(rho_34_sol - rho_34_ref).max()
+    if not err1 + err2 < 1e-4:
+        print("vk = ")
+        numpy.savetxt(sys.stdout, numpy.asarray(vk1234), fmt="% 8.4f", delimiter=", ")
+
+        print("vq = ")
+        numpy.savetxt(sys.stdout, vq, fmt="% 8.4f", delimiter=", ")
+        
+        print(f"err1 = {err1:6.2e}, err2 = {err2:6.2e}")
+        raise RuntimeError("eri_err too large")
 
     err1 = abs(eri_sol.real - eri_ref.real).max()
     err2 = abs(eri_sol.imag - eri_ref.imag).max()
-
-    print(f"k1 = {k1:4d}, k2 = {k2:4d}, k3 = {k3:4d}, k4 = {k4:4d}, err = {err1 + err2:6.2e}")
     if not err1 + err2 < 1e-4:
         print("vk = ")
         numpy.savetxt(sys.stdout, numpy.asarray(vk1234), fmt="% 8.4f", delimiter=", ")
