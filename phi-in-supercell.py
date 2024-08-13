@@ -1,37 +1,29 @@
-import os, sys
 import numpy, scipy
 import scipy.linalg
 import pyscf
 from pyscf.pbc import gto
-
-from opt_einsum import contract as einsum
-
-tmpdir = pyscf.lib.param.TMPDIR
-stdout = sys.stdout
 
 cell = pyscf.pbc.gto.Cell()
 cell.atom  = 'He 2.0000 2.0000 2.0000; He 2.0000 2.0000 6.0000'
 cell.basis = '321g'
 cell.a = numpy.diag([4.0000, 4.0000, 8.0000])
 cell.unit = 'bohr'
-cell.verbose = 5
-cell.stdout = stdout
-cell.ke_cutoff = 100.0
 cell.build()
 
 nao = cell.nao_nr()
 
-kmesh = numpy.asarray([4] * 3)
-vk = kpts = cell.make_kpts(kmesh)
+mesh = numpy.asarray([2] * 3)
+vk = kpts = cell.make_kpts(mesh)
 nk = len(vk)
 
 from pyscf.pbc.tools.k2gamma import translation_vectors_for_kmesh
-vr = rpts = translation_vectors_for_kmesh(cell, kmesh=kmesh, wrap_around=False)
+vr = rpts = translation_vectors_for_kmesh(cell, kmesh=mesh, wrap_around=False)
 nr = len(vr)
 
-scell = pyscf.pbc.tools.pbc.super_cell(cell.copy(deep=True), kmesh, wrap_around=False)
+scell = pyscf.pbc.tools.pbc.super_cell(cell.copy(deep=True), mesh, wrap_around=False)
 
-gmesh = numpy.asarray([10] * 3)
+# ng, 3
+gmesh = numpy.asarray([5] * 3)
 ng = numpy.prod(gmesh)
 
 coord0 = cell.gen_uniform_grids(gmesh, wrap_around=False)
@@ -42,53 +34,47 @@ phi0 = scell.pbc_eval_gto('GTOval', coord0)
 phi0 = phi0.reshape(ng, nr, nao)
 
 phi = scell.pbc_eval_gto('GTOval', coord1)
-phi = phi.reshape(nr, ng, nr, nao)
+phi = phi.reshape(nr, ng, nr, nao) # , nr)
 
-phik = cell.pbc_eval_gto('GTOval', coord0, kpts=vk)
-phik = numpy.asarray(phik).reshape(nk, ng, nao)
+# for ir in range(nr):
+#     for jr in range(nr):
+#         # jr = ir
+#         # ind = 0
+#         vrd = vr[jr] - vr[ir]
+#         nn = numpy.linalg.norm(vrd - vr, axis=1)
+#         ind = nn.argmin()
+#         if not nn[ind] < 1e-8:
+#             continue
 
-# rho = einsum("rgsm,rgtn->rgsmtn", phi, phi, optimize=True)
-# assert rho.shape == (nr, ng, nr, nao, nr, nao)
-# rho1 = rho[0]
+#         phi1 = phi[ir, :, jr, :]
+#         phi2 = phi0[:, ind, :]
 
-rho2 = einsum("grm,gsn->grmsn", phi0, phi0, optimize=True)
-assert rho2.shape == (ng, nr, nao, nr, nao)
-rho = rho2
+#         err = abs(phi1 - phi2).max()
+#         assert err < 1e-8, err
 
-# err = abs(rho1 - rho2).max()
-# assert err < 1e-10, err
+theta = numpy.einsum('kx,rx->kr', vk, vr)
+phase = numpy.exp(-1j * theta)
 
-rho_k = einsum("kgm,lgn->gkmln", phik.conj(), phik)
-assert rho_k.shape == (ng, nk, nao, nk, nao)
+# phi_k_1 = numpy.einsum('grm,kr->gkm', phi, phase)
+phi_k_2 = numpy.einsum("rgsm,kr,ls->kglm", phi, phase, phase) / nr
 
-# theta = numpy.dot(vr, vk.T)
-# theta = theta.reshape(nr, nk)
-# phase = numpy.exp(-1j * theta)
-# rho3 = einsum("gkmln,rk,sl->grmsn", rho_k, phase.conj(), phase) / nr / nr
-# rho3 = rho3.reshape(ng, nr, nao, nr, nao)
+for k1 in range(nk):
+    for k2 in range(nk):
+        phi2 = phi_k_2[k1, :, k2, :]
 
-# zeta1 = einsum("grmsn,hrmsn->gh", rho3, rho3)
-zeta1 = einsum("kgm,khm,lgn,lhn->gh", phik.conj(), phik, phik.conj(), phik) / nr / nr
-assert abs(zeta1.imag).max() < 1e-10
-zeta1 = zeta1.real
+        if k1 != k2:
+            err = abs(phi2).max()
+            # print(k1, k2, phi2)
+            assert abs(phi2).max() < 1e-8, err
 
-from pyscf.lib.scipy_helper import pivoted_cholesky
-chol, perm, rank = pivoted_cholesky(zeta1)
-mask = perm[:rank]
+        else:
+            phi_ = cell.pbc_eval_gto('GTOval', coord0, kpt=vk[k1])
+            phi_ = numpy.asarray(phi_).real
 
-res = scipy.linalg.lstsq(zeta1[mask][:, mask], zeta1[mask, :])
-z = res[0].T
+            # print("\nphi")
+            # print(phi_[:10])
 
-rho_sol = einsum("gI,Irm,Isn->grmsn", z, phi0[mask], phi0[mask])
-rho_ref = rho
-err = abs(rho_sol - rho_ref).max()
-assert err < 1e-6, err
-
-rho_k_ref = rho_k
-rho_k_sol = einsum("gI,kIm,lIn->gkmln", z, phik[:, mask].conj(), phik[:, mask])
-err = abs(rho_k_sol - rho_k_ref).max()
-assert err < 1e-6, err
-print(err)
-
-print("all test passed!")
-
+            # print("\nphi")
+            # print(phi2[:10].real)
+            err = abs(phi_ - phi2).max()
+            assert err < 1e-8, err
