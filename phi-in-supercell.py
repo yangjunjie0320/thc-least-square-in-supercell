@@ -71,16 +71,13 @@ rho = rho2
 # zeta1 = einsum("grmsn,hrmsn->gh", rho3, rho3)
 zeta1 = einsum("kgm,khm,lgn,lhn->gh", phik.conj(), phik, phik.conj(), phik) / nr / nr
 assert abs(zeta1.imag).max() < 1e-10
-
 zeta1 = zeta1.real
-err = 0.0 # abs(zeta1 - zeta2).max()
-assert err < 1e-10, err
 
 from pyscf.lib.scipy_helper import pivoted_cholesky
 chol, perm, rank = pivoted_cholesky(zeta1)
 mask = perm[:rank]
 
-res = scipy.linalg.lstsq(zeta1[mask][:, mask], zeta1[mask, :].T)
+res = scipy.linalg.lstsq(zeta1[mask][:, mask], zeta1[mask, :])
 print(res[0].shape)
 print(res[1].shape)
 print(res[2])
