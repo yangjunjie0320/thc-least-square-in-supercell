@@ -46,7 +46,6 @@ phi = phi.reshape(nr, ng, nr, nao)
 
 phik = cell.pbc_eval_gto('GTOval', coord0, kpts=vk)
 phik = numpy.asarray(phik).reshape(nk, ng, nao)
-print(phik.shape)
 
 # rho = einsum("rgsm,rgtn->rgsmtn", phi, phi, optimize=True)
 # assert rho.shape == (nr, ng, nr, nao, nr, nao)
@@ -59,8 +58,8 @@ rho = rho2
 # err = abs(rho1 - rho2).max()
 # assert err < 1e-10, err
 
-# rho_k = einsum("kgm,lgn->gkmln", phik.conj(), phik)
-# assert rho_k.shape == (ng, nk, nao, nk, nao)
+rho_k = einsum("kgm,lgn->gkmln", phik.conj(), phik)
+assert rho_k.shape == (ng, nk, nao, nk, nao)
 
 # theta = numpy.dot(vr, vk.T)
 # theta = theta.reshape(nr, nk)
@@ -78,9 +77,18 @@ chol, perm, rank = pivoted_cholesky(zeta1)
 mask = perm[:rank]
 
 res = scipy.linalg.lstsq(zeta1[mask][:, mask], zeta1[mask, :])
-print(res[0].shape)
-print(res[1].shape)
-print(res[2])
+z = res[0].T
+
+rho_sol = einsum("gI,Irm,Isn->grmsn", z, phi0[mask], phi0[mask])
+rho_ref = rho
+err = abs(rho_sol - rho_ref).max()
+assert err < 1e-6, err
+
+rho_k_ref = rho_k
+rho_k_sol = einsum("gI,kIm,lIn->gkmln", z, phik[:, mask].conj(), phik[:, mask])
+err = abs(rho_k_sol - rho_k_ref).max()
+assert err < 1e-6, err
+print(err)
 
 print("all test passed!")
 
