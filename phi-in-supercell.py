@@ -61,18 +61,14 @@ assert err < 1e-10, err
 rho_k = einsum("kgm,lgn->gkmln", phik.conj(), phik)
 assert rho_k.shape == (ng, nk, nao, nk, nao)
 
-theta = numpy.dot(coord1, vk.T)
-theta = theta.reshape(nr * ng, nk)
+theta = numpy.dot(vr, vk.T)
+theta = theta.reshape(nr, nk)
 phase = numpy.exp(-1j * theta)
-rho3 = einsum("gkmln,rk,sl->grmln", rho_k, phase.conj(), phase)
+rho3 = einsum("gkmln,rk,sl->grmsn", rho_k, phase.conj(), phase) / nr / nr
 rho3 = rho3.reshape(ng, nr, nao, nr, nao)
 
-print("\nrho1")
-rho1 = rho1.reshape(-1, nr * nao * nr * nao)
-rho1 = rho1[:10, :]
-numpy.savetxt(sys.stdout, rho1, fmt="% 8.6f", delimiter=", ")
+err = abs(rho1 - rho3).max()
+assert err < 1e-10
 
-print("\nrho2")
-rho3 = rho3.reshape(-1, nr * nao * nr * nao)
-rho3 = rho3[:10, :]
-numpy.savetxt(sys.stdout, rho3, fmt="% 8.6f", delimiter=", ")
+print("all test passed!")
+
