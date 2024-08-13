@@ -44,22 +44,59 @@ zeta = zeta.real
 from pyscf.lib.scipy_helper import pivoted_cholesky
 chol, perm, rank = pivoted_cholesky(zeta)
 mask = perm[:rank]
-
 res = scipy.linalg.lstsq(zeta[mask][:, mask], zeta[mask, :])
+
 z = res[0].T
 nip = z.shape[1]
 assert z.shape == (ng, nip)
 print(f"{z.shape = }, {nip = }")
 
-# for (k1, k2) in itertools.product(range(nk), repeat=2):
-#     vk1, vk2 = vk[k1], vk[k2]
+def get_eri_1(k1, k2, k3, k4):
+    vk1, vk2, vk3, vk4 = vk[k1], vk[k2], vk[k3], vk[k4]
+    q = kconserv2[k1, k2]
+    vq = vk[q]
 
-#     rho_k1_k2_ref = einsum("gm,gn->gmn", phik[k1].conj(), phik[k2])
-#     rho_k1_k2_sol = einsum("gI,Im,In->gmn", z, phik[k1][mask].conj(), phik[k2][mask])
+    from pyscf.pbc.tools import fft, ifft
+    t12 = numpy.dot(coord, vq)
+    f12 = numpy.exp(-1j * t12)
+    z12_g = fft(einsum("gI,g->Ig", z, f12).reshape(-1, ng), gmesh)
+    assert z12_g.shape == (nip, ng)
 
-#     err = abs(rho_k1_k2_ref - rho_k1_k2_sol).max()
-#     print(f"k1 = {k1:4d}, k2 = {k2:4d}, err = {err:6.2e}")
-#     assert err < 1e-5
+    v12_g  = z12_g * tools.get_coulG(c, k=vq, mesh=gmesh) * (c.vol / ng)
+    assert v12_g.shape == (nip, ng)
+
+    t34 = numpy.dot(coord, vq)
+    f34 = numpy.exp(1j * t34)
+    z34_g = ifft(einsum("gI,g->Ig", z, f34).reshape(-1, ng), gmesh)
+    assert z34_g.shape == (nip, ng)
+    coul_q = einsum("Ig,Jg->IJ", v12_g, z34_g)
+
+    x1, x2, x3, x4 = pbcdft.numint.eval_ao_kpts(c, coord[mask], kpts=[vk1, vk2, vk3, vk4])
+
+    eri = einsum("IJ,Im,In,Jk,Jl->mnkl", coul_q, x1.conj(), x2, x3, x4.conj())
+    return eri.reshape(nao * nao, nao * nao)
+
+def get_eri_2(k1, k2, k3, k4):
+    vk1, vk2, vk3, vk4 = vk[k1], vk[k2], vk[k3], vk[k4]
+    q = kconserv2[k1, k2]
+    vq = vk[q]
+    # assert q == kconserv2[k3, k4]
+
+    from pyscf.pbc.tools import fft, ifft
+    t12 = numpy.dot(coord, vq)
+    f12 = numpy.exp(-1j * t12)
+
+    from pyscf.pbc.df.fft_ao2mo import get_ao_pairs_G
+    z12_g  = get_ao_pairs_G(df, [vk1, vk2], vq, compact=False)
+    v12_g  = tools.get_coulG(c, k=vq, mesh=gmesh)[:, None] * z12_g
+    v12_g *= c.vol / ng / ng
+
+    z34_g = get_ao_pairs_G(df, [-vk3, -vk4], vq, compact=False).conj()
+
+    eri = einsum(
+        "gx,gy->xy", v12_g, z34_g
+    )
+    return eri
 
 for (k1, k2, k3) in itertools.product(range(nk), repeat=3):
     vk1, vk2, vk3 = vk[k1], vk[k2], vk[k3]
@@ -69,72 +106,16 @@ for (k1, k2, k3) in itertools.product(range(nk), repeat=3):
     k4 = kconserv3[k1, k2, k3]
     vk4 = vk[k4]
 
-    # if not (k1, k2, k3, k4) == (1, 0, 0, 1):
-    #     continue
-
     from pyscf.pbc.df.df_ao2mo import _iskconserv
     from pyscf.pbc.df.df_ao2mo import _format_kpts
     vk1234 = numpy.asarray([vk1, vk2, vk3, vk4])
     assert _iskconserv(c, vk1234)
 
-    rho_k1_k2_ref = einsum("gm,gn->gmn", phik[k1].conj(), phik[k2])
-    rho_k3_k4_ref = einsum("gm,gn->gmn", phik[k3].conj(), phik[k4])
-    rho_12 = rho_k1_k2_ref
-    rho_34 = rho_k3_k4_ref
+    eri_sol = get_eri_1(k1, k2, k3, k4)
+    eri_ref = get_eri_2(k1, k2, k3, k4)
 
-    # rho_k1_k2_sol = einsum("gI,Im,In->gmn", z, phik[k1][mask].conj(), phik[k2][mask])
-    # err = abs(rho_k1_k2_ref - rho_k1_k2_sol).max()
-    # print(f"k1 = {k1:4d}, k2 = {k2:4d}, err = {err:6.2e}")
-
-    # vq = vq12
-    from pyscf.pbc.tools import fft, ifft
-    t12 = numpy.dot(coord, vq) # 12)
-    f12 = numpy.exp(-1j * t12)
-    z12_g = fft(einsum("gI,g->Ig", z, f12).reshape(-1, ng), gmesh)
-    assert z12_g.shape == (nip, ng)
-    v12_g  = z12_g * tools.get_coulG(c, k=vq, mesh=gmesh) * (c.vol / ng)
-    assert v12_g.shape == (nip, ng)
-
-    # z12_g = fft(einsum("gmn,g->mng", rho_12, f12).reshape(-1, ng), gmesh)
-    # v12_g = z12_g * tools.get_coulG(c, k=vq, mesh=gmesh) * (c.vol / ng)
-
-    t34 = numpy.dot(coord, vq)
-    f34 = numpy.exp(1j * t34)
-    z34_g = ifft(einsum("gI,g->Ig", z, f34).reshape(-1, ng), gmesh)
-    assert z34_g.shape == (nip, ng)
-    # z34_g = ifft(einsum("gmn,g->mng", rho_34, f34).reshape(-1, ng), gmesh)
-    coul_q = einsum("Ig,Jg->IJ", v12_g, z34_g)
-
-    # coul_g_vq   = tools.get_coulG(c, k=vk[q], mesh=gmesh)
-    # print(f"\n{coul_g_vq.shape = }, {coul_g_vq.dtype = }")
-    # numpy.savetxt(sys.stdout, coul_g_vq[:10], fmt="% 12.6f", delimiter=", ")
-
-    # coul_g_vq12 = tools.get_coulG(c, k=vq12, mesh=gmesh)
-    # print(f"\n{coul_g_vq12.shape = }, {coul_g_vq12.dtype = }")
-    # numpy.savetxt(sys.stdout, coul_g_vq12[:10], fmt="% 12.6f", delimiter=", ")
-
-    # coul_g_vq34 = tools.get_coulG(c, k=vq34, mesh=gmesh)
-    # print(f"\n{coul_g_vq34.shape = }, {coul_g_vq34.dtype = }")
-    # numpy.savetxt(sys.stdout, coul_g_vq34[:10], fmt="% 12.6f", delimiter=", ")
-    # assert 1 == 2
-
-    # assert not (k1, k2, k3, k4) == (1, 0, 0, 1)
-
-    # assert _iskconserv(c, vk1234), f"{vk1 = }, {vk2 = }, {vk3 = }, {vk4 = }"
-    x1, x2, x3, x4 = pbcdft.numint.eval_ao_kpts(c, coord[mask], kpts=vk1234, deriv=0)
-
-    eri_sol = einsum("IJ,Im,In,Jk,Jl->mnkl",
-            coul_q, x1.conj(), x2, x3.conj(), x4,
-            optimize=True
-            )
-    # eri_sol = einsum("xg,yg->xy", v12_g, z34_g)
-    eri_sol = eri_sol.reshape(nao * nao, nao * nao)
-
-    eri_ref = df.get_eri(vk1234, compact=False)
-    eri_ref = eri_ref.reshape(nao * nao, nao * nao)
-
-    err1 = numpy.abs(eri_sol.real - eri_ref.real).max()
-    err2 = numpy.abs(eri_sol.imag - eri_ref.imag).max()
+    err1 = abs(eri_sol.real - eri_ref.real).max()
+    err2 = abs(eri_sol.imag - eri_ref.imag).max()
 
     print(f"k1 = {k1:4d}, k2 = {k2:4d}, k3 = {k3:4d}, k4 = {k4:4d}, err = {err1 + err2:6.2e}")
     if not err1 + err2 < 1e-4:
@@ -145,17 +126,4 @@ for (k1, k2, k3) in itertools.product(range(nk), repeat=3):
         numpy.savetxt(sys.stdout, vq, fmt="% 8.4f", delimiter=", ")
         
         print(f"err1 = {err1:6.2e}, err2 = {err2:6.2e}")
-
-        print("eri_sol (real) = ")
-        numpy.savetxt(sys.stdout, eri_sol.real, fmt="% 12.6f", delimiter=", ")
-
-        print("eri_sol (imag) = ")
-        numpy.savetxt(sys.stdout, eri_sol.imag, fmt="% 12.6f", delimiter=", ")
-
-        print("eri_ref = ")
-        numpy.savetxt(sys.stdout, eri_ref.real, fmt="% 12.6f", delimiter=", ")
-
-        print("eri_ref = ")
-        numpy.savetxt(sys.stdout, eri_ref.imag, fmt="% 12.6f", delimiter=", ")
-
         raise RuntimeError("eri_err too large")
