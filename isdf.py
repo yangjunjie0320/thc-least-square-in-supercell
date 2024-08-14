@@ -95,11 +95,6 @@ def get_eri_2(k1, k2, k3, k4):
     vk1, vk2, vk3, vk4 = vk[k1], vk[k2], vk[k3], vk[k4]
     q = kconserv2[k1, k2]
     vq = vk[q]
-    # assert q == kconserv2[k3, k4]
-
-    from pyscf.pbc.tools import fft, ifft
-    t12 = numpy.dot(coord, vq)
-    f12 = numpy.exp(-1j * t12)
 
     from pyscf.pbc.df.fft_ao2mo import get_ao_pairs_G
     z12_g  = get_ao_pairs_G(df, [vk1, vk2], vq, compact=False)
@@ -151,4 +146,5 @@ for (k1, k2, k3) in itertools.product(range(nk), repeat=3):
 
     # numpy.savetxt(sys.stdout, sol["eri"].real, fmt="% 8.2e", header="sol[eri]", delimiter=", ")
     # numpy.savetxt(sys.stdout, ref["eri"].real, fmt="% 8.2e", header="ref[eri]", delimiter=", ")
+
 print("all tests passed")
