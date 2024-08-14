@@ -1,0 +1,13 @@
+400000
+TMPDIR = /scratch/global/yangjunjie/phi/546437/
+PYSCF_TMPDIR = /scratch/global/yangjunjie/phi/546437/
+Traceback (most recent call last):
+  File "/home/yangjunjie/work/thc-least-square-in-supercell/isdf.py", line 134, in <module>
+    sol = get_eri_1(k1, k2, k3, k4)
+  File "/home/yangjunjie/work/thc-least-square-in-supercell/isdf.py", line 80, in get_eri_1
+    eri = einsum("IJ,Im,In,Jk,Jl->mnkl", coul[q], x1.conj(), x2, x3.conj(), x4)
+  File "/home/yangjunjie/anaconda3/envs/py310-pyscf/lib/python3.10/site-packages/opt_einsum/contract.py", line 497, in contract
+    operands, contraction_list = contract_path(*operands,
+  File "/home/yangjunjie/anaconda3/envs/py310-pyscf/lib/python3.10/site-packages/opt_einsum/contract.py", line 238, in contract_path
+    raise ValueError("Size of label '{}' for operand {} ({}) does not match previous "
+ValueError: Size of label 'I' for operand 1 (1728) does not match previous terms (257).
