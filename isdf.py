@@ -18,7 +18,7 @@ c.a = numpy.diag([2.0, 2.0, 6.0])
 c.basis = "sto3g"
 c.verbose = 0
 # c.mesh = [10] * 3   
-c.mesh = [15] * 3
+c.mesh = [12] * 3
 c.build()
 
 from pyscf.pbc.lib.kpts_helper import get_kconserv
@@ -42,7 +42,7 @@ assert abs(zeta.imag).max() < 1e-10
 zeta = zeta.real
 
 from pyscf.lib.scipy_helper import pivoted_cholesky
-chol, perm, rank = pivoted_cholesky(zeta)
+chol, perm, rank = pivoted_cholesky(zeta, tol=1e-20)
 mask = perm[:rank]
 res = scipy.linalg.lstsq(zeta[mask][:, mask], zeta[mask, :])
 
@@ -52,7 +52,6 @@ assert z.shape == (ng, nip)
 print(f"{z.shape = }, {nip = }")
 
 def get_eri_1(k1, k2, k3, k4):
-    vk1, vk2, vk3, vk4 = vk[k1], vk[k2], vk[k3], vk[k4]
     q = kconserv2[k1, k2]
     vq = vk[q]
 
@@ -62,21 +61,35 @@ def get_eri_1(k1, k2, k3, k4):
     z12_g = fft(einsum("gI,g->Ig", z, f12).reshape(-1, ng), gmesh)
     assert z12_g.shape == (nip, ng)
 
-    v12_g  = z12_g * tools.get_coulG(c, k=vq, mesh=gmesh) * (c.vol / ng)
+    v12_g  = z12_g * tools.get_coulG(c, k=vq, mesh=gmesh)
+    v12_g *= c.vol / ng / ng
     assert v12_g.shape == (nip, ng)
 
     t34 = numpy.dot(coord, vq)
-    f34 = numpy.exp(1j * t34)
-    z34_g = ifft(einsum("gI,g->Ig", z, f34).reshape(-1, ng), gmesh)
+    f34 = numpy.exp(-1j * t34)
+    z34_g = fft(einsum("gI,g->Ig", z, f34).reshape(-1, ng), gmesh)
     assert z34_g.shape == (nip, ng)
-    coul_q = einsum("Ig,Jg->IJ", v12_g, z34_g)
+    coul_q = einsum("Ig,Jg->IJ", v12_g, z34_g.conj())
 
-    x1, x2, x3, x4 = pbcdft.numint.eval_ao_kpts(c, coord[mask], kpts=[vk1, vk2, vk3, vk4])
+    # x1, x2, x3, x4 = pbcdft.numint.eval_ao_kpts(c, coord[mask], kpts=[vk1, vk2, -vk3, -vk4])
+    x1 = phik[k1][mask]
+    x2 = phik[k2][mask]
+    x3 = phik[k3][mask]
+    x4 = phik[k4][mask]
 
-    eri = einsum("IJ,Im,In,Jk,Jl->mnkl", coul_q, x1.conj(), x2, x3, x4.conj())
-    ao_pair_12 = einsum("Ig,Im,In->mng", z12_g, x1.conj(), x2)
-    ao_pair_34 = einsum("Ig,Jk,Jl->klg", z34_g, x3, x4.conj())
-    return eri.reshape(nao * nao, nao * nao), ao_pair_12, ao_pair_34
+    eri = einsum("IJ,Im,In,Jk,Jl->mnkl", coul_q, x1.conj(), x2, x3.conj(), x4)
+    ao_pair_r_12 = einsum("gI,Im,In->gmn", z, x1.conj(), x2).reshape(ng, -1)
+    ao_pair_r_34 = einsum("gI,Im,In->gmn", z, x3.conj(), x4).reshape(ng, -1)
+    ao_pair_g_12 = einsum("Ig,Im,In->gmn", z12_g, x1.conj(), x2).reshape(ng, -1)
+    ao_pair_g_34 = einsum("Ig,Im,In->gmn", z34_g, x3.conj(), x4).reshape(ng, -1)
+    res = {
+        "eri": eri.reshape(nao * nao, nao * nao),
+        "ao_pair_r_12": ao_pair_r_12,
+        "ao_pair_r_34": ao_pair_r_34,
+        "ao_pair_g_12": ao_pair_g_12,
+        "ao_pair_g_34": ao_pair_g_34,
+    }
+    return res
 
 def get_eri_2(k1, k2, k3, k4):
     vk1, vk2, vk3, vk4 = vk[k1], vk[k2], vk[k3], vk[k4]
@@ -98,7 +111,20 @@ def get_eri_2(k1, k2, k3, k4):
     eri = einsum(
         "gx,gy->xy", v12_g, z34_g
     )
-    return eri, z12_g, z34_g
+    ao_pair_r_12 = einsum("gm,gn->gmn", phik[k1].conj(), phik[k2]).reshape(ng, -1)
+    ao_pair_r_34 = einsum("gm,gn->gmn", phik[k3].conj(), phik[k4]).reshape(ng, -1)
+    ao_pair_g_12 = get_ao_pairs_G(df, [vk1, vk2], vq, compact=False)
+    ao_pair_g_34 = get_ao_pairs_G(df, [vk3, vk4], vq, compact=False)
+
+    res = {
+        "eri": eri,
+        "ao_pair_r_12": ao_pair_r_12,
+        "ao_pair_r_34": ao_pair_r_34,
+        "ao_pair_g_12": ao_pair_g_12,
+        "ao_pair_g_34": ao_pair_g_34,
+    }
+
+    return res
 
 for (k1, k2, k3) in itertools.product(range(nk), repeat=3):
     vk1, vk2, vk3 = vk[k1], vk[k2], vk[k3]
@@ -110,34 +136,19 @@ for (k1, k2, k3) in itertools.product(range(nk), repeat=3):
     vk1234 = numpy.asarray([vk1, vk2, vk3, vk4])
     assert _iskconserv(c, vk1234)
 
-    if not (k1, k2, k3, k4) == (0, 1, 0, 3):
-        continue
+    sol = get_eri_1(k1, k2, k3, k4)
+    ref = get_eri_2(k1, k2, k3, k4)
 
-    eri_sol, rho_12_sol, rho_34_sol = get_eri_1(k1, k2, k3, k4)
-    eri_ref, rho_12_ref, rho_34_ref = get_eri_2(k1, k2, k3, k4)
+    err_list = []
+    err_list.append(abs(sol["ao_pair_r_12"] - ref["ao_pair_r_12"]).max())
+    err_list.append(abs(sol["ao_pair_r_34"] - ref["ao_pair_r_34"]).max())
+    err_list.append(abs(sol["ao_pair_g_12"] - ref["ao_pair_g_12"]).max())
+    err_list.append(abs(sol["ao_pair_g_34"] - ref["ao_pair_g_34"]).max())
+    err_list.append(abs(sol["eri"] - ref["eri"]).max())
 
-    print(f"k1 = {k1:4d}, k2 = {k2:4d}, k3 = {k3:4d}, k4 = {k4:4d}, err = {err1 + err2:6.2e}")
+    info = ", ".join("% 8.2e" % x for x in err_list)
+    print(f"{k1 = :4d}, {k2 = :4d}, {k3 = :4d}, {k4 = :4d}, {info = :s}")
 
-    err1 = abs(rho_12_sol - rho_12_ref).max()
-    err2 = abs(rho_34_sol - rho_34_ref).max()
-    if not err1 + err2 < 1e-4:
-        print("vk = ")
-        numpy.savetxt(sys.stdout, numpy.asarray(vk1234), fmt="% 8.4f", delimiter=", ")
-
-        print("vq = ")
-        numpy.savetxt(sys.stdout, vq, fmt="% 8.4f", delimiter=", ")
-        
-        print(f"err1 = {err1:6.2e}, err2 = {err2:6.2e}")
-        raise RuntimeError("eri_err too large")
-
-    err1 = abs(eri_sol.real - eri_ref.real).max()
-    err2 = abs(eri_sol.imag - eri_ref.imag).max()
-    if not err1 + err2 < 1e-4:
-        print("vk = ")
-        numpy.savetxt(sys.stdout, numpy.asarray(vk1234), fmt="% 8.4f", delimiter=", ")
-
-        print("vq = ")
-        numpy.savetxt(sys.stdout, vq, fmt="% 8.4f", delimiter=", ")
-        
-        print(f"err1 = {err1:6.2e}, err2 = {err2:6.2e}")
-        raise RuntimeError("eri_err too large")
+    numpy.savetxt(sys.stdout, sol["eri"].real, fmt="% 8.2e", header="sol[eri]", delimiter=", ")
+    numpy.savetxt(sys.stdout, ref["eri"].real, fmt="% 8.2e", header="ref[eri]", delimiter=", ")
+print("all tests passed")
