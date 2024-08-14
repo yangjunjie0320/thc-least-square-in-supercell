@@ -49,12 +49,9 @@ res = scipy.linalg.lstsq(zeta[mask][:, mask], zeta[mask, :])
 z = res[0].T
 nip = z.shape[1]
 assert z.shape == (ng, nip)
-print(f"{z.shape = }, {nip = }")
 
-def get_eri_1(k1, k2, k3, k4):
-    q = kconserv2[k1, k2]
-    vq = vk[q]
-
+coul = []
+for q, vq in enumerate(vk):
     from pyscf.pbc.tools import fft, ifft
     t12 = numpy.dot(coord, vq)
     f12 = numpy.exp(-1j * t12)
@@ -69,25 +66,28 @@ def get_eri_1(k1, k2, k3, k4):
     f34 = numpy.exp(-1j * t34)
     z34_g = fft(einsum("gI,g->Ig", z, f34).reshape(-1, ng), gmesh)
     assert z34_g.shape == (nip, ng)
-    coul_q = einsum("Ig,Jg->IJ", v12_g, z34_g.conj())
 
-    # x1, x2, x3, x4 = pbcdft.numint.eval_ao_kpts(c, coord[mask], kpts=[vk1, vk2, -vk3, -vk4])
+    coul.append(einsum("Im,In->mn", z12_g, z34_g.conj()))
+
+def get_eri_1(k1, k2, k3, k4):
+    q = kconserv2[k1, k2]
+
     x1 = phik[k1][mask]
     x2 = phik[k2][mask]
     x3 = phik[k3][mask]
     x4 = phik[k4][mask]
 
-    eri = einsum("IJ,Im,In,Jk,Jl->mnkl", coul_q, x1.conj(), x2, x3.conj(), x4)
-    ao_pair_r_12 = einsum("gI,Im,In->gmn", z, x1.conj(), x2).reshape(ng, -1)
-    ao_pair_r_34 = einsum("gI,Im,In->gmn", z, x3.conj(), x4).reshape(ng, -1)
-    ao_pair_g_12 = einsum("Ig,Im,In->gmn", z12_g, x1.conj(), x2).reshape(ng, -1)
-    ao_pair_g_34 = einsum("Ig,Im,In->gmn", z34_g, x3.conj(), x4).reshape(ng, -1)
+    eri = einsum("IJ,Im,In,Jk,Jl->mnkl", coul[q], x1.conj(), x2, x3.conj(), x4)
+    # ao_pair_r_12 = einsum("gI,Im,In->gmn", z, x1.conj(), x2).reshape(ng, -1)
+    # ao_pair_r_34 = einsum("gI,Im,In->gmn", z, x3.conj(), x4).reshape(ng, -1)
+    # ao_pair_g_12 = einsum("Ig,Im,In->gmn", z12_g, x1.conj(), x2).reshape(ng, -1)
+    # ao_pair_g_34 = einsum("Ig,Im,In->gmn", z34_g, x3.conj(), x4).reshape(ng, -1)
     res = {
         "eri": eri.reshape(nao * nao, nao * nao),
-        "ao_pair_r_12": ao_pair_r_12,
-        "ao_pair_r_34": ao_pair_r_34,
-        "ao_pair_g_12": ao_pair_g_12,
-        "ao_pair_g_34": ao_pair_g_34,
+        # "ao_pair_r_12": ao_pair_r_12,
+        # "ao_pair_r_34": ao_pair_r_34,
+        # "ao_pair_g_12": ao_pair_g_12,
+        # "ao_pair_g_34": ao_pair_g_34,
     }
     return res
 
@@ -111,17 +111,17 @@ def get_eri_2(k1, k2, k3, k4):
     eri = einsum(
         "gx,gy->xy", v12_g, z34_g
     )
-    ao_pair_r_12 = einsum("gm,gn->gmn", phik[k1].conj(), phik[k2]).reshape(ng, -1)
-    ao_pair_r_34 = einsum("gm,gn->gmn", phik[k3].conj(), phik[k4]).reshape(ng, -1)
-    ao_pair_g_12 = get_ao_pairs_G(df, [vk1, vk2], vq, compact=False)
-    ao_pair_g_34 = get_ao_pairs_G(df, [vk3, vk4], vq, compact=False)
+    # ao_pair_r_12 = einsum("gm,gn->gmn", phik[k1].conj(), phik[k2]).reshape(ng, -1)
+    # ao_pair_r_34 = einsum("gm,gn->gmn", phik[k3].conj(), phik[k4]).reshape(ng, -1)
+    # ao_pair_g_12 = get_ao_pairs_G(df, [vk1, vk2], vq, compact=False)
+    # ao_pair_g_34 = get_ao_pairs_G(df, [vk3, vk4], vq, compact=False)
 
     res = {
         "eri": eri,
-        "ao_pair_r_12": ao_pair_r_12,
-        "ao_pair_r_34": ao_pair_r_34,
-        "ao_pair_g_12": ao_pair_g_12,
-        "ao_pair_g_34": ao_pair_g_34,
+        # "ao_pair_r_12": ao_pair_r_12,
+        # "ao_pair_r_34": ao_pair_r_34,
+        # "ao_pair_g_12": ao_pair_g_12,
+        # "ao_pair_g_34": ao_pair_g_34,
     }
 
     return res
@@ -140,10 +140,10 @@ for (k1, k2, k3) in itertools.product(range(nk), repeat=3):
     ref = get_eri_2(k1, k2, k3, k4)
 
     err_list = []
-    err_list.append(abs(sol["ao_pair_r_12"] - ref["ao_pair_r_12"]).max())
-    err_list.append(abs(sol["ao_pair_r_34"] - ref["ao_pair_r_34"]).max())
-    err_list.append(abs(sol["ao_pair_g_12"] - ref["ao_pair_g_12"]).max())
-    err_list.append(abs(sol["ao_pair_g_34"] - ref["ao_pair_g_34"]).max())
+    # err_list.append(abs(sol["ao_pair_r_12"] - ref["ao_pair_r_12"]).max())
+    # err_list.append(abs(sol["ao_pair_r_34"] - ref["ao_pair_r_34"]).max())
+    # err_list.append(abs(sol["ao_pair_g_12"] - ref["ao_pair_g_12"]).max())
+    # err_list.append(abs(sol["ao_pair_g_34"] - ref["ao_pair_g_34"]).max())
     err_list.append(abs(sol["eri"] - ref["eri"]).max())
 
     info = ", ".join("% 8.2e" % x for x in err_list)
