@@ -5,12 +5,12 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=28
 #SBATCH --job-name=phi
-#SBATCH --mem=500000
+#SBATCH --mem=400000
 
 source /home/yangjunjie/.bashrc
-export OMP_NUM_THREADS=28 # $SLURM_CPUS_PER_TASK;
-export MKL_NUM_THREADS=28 # $SLURM_CPUS_PER_TASK;
-export PYSCF_MAX_MEMORY=50000 # $SLURM_MEM_PER_NODE;
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK;
+export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK;
+export PYSCF_MAX_MEMORY=$SLURM_MEM_PER_NODE;
 export PYTHONUNBUFFERED=TRUE;
 echo $PYSCF_MAX_MEMORY
 
@@ -21,5 +21,5 @@ export PYSCF_TMPDIR=$TMPDIR
 echo TMPDIR       = $TMPDIR
 echo PYSCF_TMPDIR = $PYSCF_TMPDIR
 mkdir -p $TMPDIR
-python phi-in-supercell.py
+python isdf.py # phi-in-supercell.py
 

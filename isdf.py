@@ -149,6 +149,6 @@ for (k1, k2, k3) in itertools.product(range(nk), repeat=3):
     info = ", ".join("% 8.2e" % x for x in err_list)
     print(f"{k1 = :4d}, {k2 = :4d}, {k3 = :4d}, {k4 = :4d}, {info = :s}")
 
-    numpy.savetxt(sys.stdout, sol["eri"].real, fmt="% 8.2e", header="sol[eri]", delimiter=", ")
-    numpy.savetxt(sys.stdout, ref["eri"].real, fmt="% 8.2e", header="ref[eri]", delimiter=", ")
+    # numpy.savetxt(sys.stdout, sol["eri"].real, fmt="% 8.2e", header="sol[eri]", delimiter=", ")
+    # numpy.savetxt(sys.stdout, ref["eri"].real, fmt="% 8.2e", header="ref[eri]", delimiter=", ")
 print("all tests passed")
