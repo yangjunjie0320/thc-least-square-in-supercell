@@ -67,7 +67,7 @@ for q, vq in enumerate(vk):
     z34_g = fft(einsum("gI,g->Ig", z, f34).reshape(-1, ng), gmesh)
     assert z34_g.shape == (nip, ng)
 
-    coul.append(einsum("Im,In->mn", z12_g, z34_g.conj()))
+    coul.append(einsum("Ig,Jg->IJ", v12_g, z34_g.conj()))
 
 def get_eri_1(k1, k2, k3, k4):
     q = kconserv2[k1, k2]
